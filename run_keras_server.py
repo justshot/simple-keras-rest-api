@@ -17,20 +17,23 @@ import flask
 import io
 import json
 import cv2 as cv
+import tensorflow as tf
 from flask_cors import CORS
 
 # initialize our Flask application and the Keras model
 app = flask.Flask(__name__)
 CORS(app)
-model = None
+siamese_net = None
 image_size = 105
+graph = tf.get_default_graph()
 
 def load_model():
 	# load the pre-trained Keras model (here we are using a model
 	# pre-trained on ImageNet and provided by Keras, but you can
 	# substitute in your own networks just as easily)
-	global model
-	# model = ResNet50(weights="imagenet")
+	global siamese_net 
+	siamese_net = SiameseNet_Signature.create_model()
+	siamese_net.load_weights('weights-800-iterations')
 
 @app.route("/verify", methods=["POST"])
 def verify():
@@ -57,7 +60,9 @@ def verify():
 			pairs[1][0,:,:,:] = new_image2.reshape(w, h, 1)
 
 			# inputs, targets = SiameseNet_Signature.loader.get_batch(10,'sig_data_train')
-			probs = SiameseNet_Signature.siamese_net.predict(pairs)
+			global graph
+			with graph.as_default():
+				probs = siamese_net.predict(pairs)
 			probs = probs.tolist()
 			data = json.dumps(probs)
 			print("data: {}".format(data))

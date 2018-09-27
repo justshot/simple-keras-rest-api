@@ -1,11 +1,13 @@
 
 # coding: utf-8
 
+# ## Import Python Modules
+
 # In[1]:
 
 
 from keras.layers import Input, Conv2D, Lambda, merge, Dense, Flatten,MaxPooling2D
-from keras.models import Model, Sequential, load_model
+from keras.models import Model, Sequential
 from keras.regularizers import l2
 from keras import backend as K
 from keras.optimizers import SGD,Adam
@@ -15,10 +17,17 @@ import numpy as np
 import os
 import pickle
 import time
+import datetime
 import matplotlib.pyplot as plt
 import seaborn as sns
 from sklearn.utils import shuffle
-# get_ipython().run_line_magic('matplotlib', 'inline')
+
+
+# ## Create Model
+
+# In[10]:
+
+
 def W_init(shape,name=None):
     """Initialize weights as in paper"""
     values = rng.normal(loc=0,scale=1e-2,size=shape)
@@ -29,66 +38,69 @@ def b_init(shape,name=None):
     values=rng.normal(loc=0.5,scale=1e-2,size=shape)
     return K.variable(values,name=name)
 
-input_shape = (105, 105, 1)
-left_input = Input(input_shape)
-right_input = Input(input_shape)
-#build convnet to use in each siamese 'leg'
-convnet = Sequential()
-convnet.add(Conv2D(64,(10,10),activation='relu',input_shape=input_shape,
-                   kernel_initializer=W_init,kernel_regularizer=l2(2e-4)))
-convnet.add(MaxPooling2D())
-convnet.add(Conv2D(128,(7,7),activation='relu',
-                   kernel_regularizer=l2(2e-4),kernel_initializer=W_init,bias_initializer=b_init))
-convnet.add(MaxPooling2D())
-convnet.add(Conv2D(128,(4,4),activation='relu',kernel_initializer=W_init,kernel_regularizer=l2(2e-4),bias_initializer=b_init))
-convnet.add(MaxPooling2D())
-convnet.add(Conv2D(256,(4,4),activation='relu',kernel_initializer=W_init,kernel_regularizer=l2(2e-4),bias_initializer=b_init))
-convnet.add(Flatten())
-convnet.add(Dense(4096,activation="sigmoid",kernel_regularizer=l2(1e-3),kernel_initializer=W_init,bias_initializer=b_init))
+def create_model():
+    input_shape = (105, 105, 1)
+    left_input = Input(input_shape)
+    right_input = Input(input_shape)
+    #build convnet to use in each siamese 'leg'
+    convnet = Sequential()
+    convnet.add(Conv2D(64,(10,10),activation='relu',input_shape=input_shape,
+                       kernel_initializer=W_init,kernel_regularizer=l2(2e-4)))
+    convnet.add(MaxPooling2D())
+    convnet.add(Conv2D(128,(7,7),activation='relu',
+                       kernel_regularizer=l2(2e-4),kernel_initializer=W_init,bias_initializer=b_init))
+    convnet.add(MaxPooling2D())
+    convnet.add(Conv2D(128,(4,4),activation='relu',kernel_initializer=W_init,kernel_regularizer=l2(2e-4),bias_initializer=b_init))
+    convnet.add(MaxPooling2D())
+    convnet.add(Conv2D(256,(4,4),activation='relu',kernel_initializer=W_init,kernel_regularizer=l2(2e-4),bias_initializer=b_init))
+    convnet.add(Flatten())
+    convnet.add(Dense(4096,activation="sigmoid",kernel_regularizer=l2(1e-3),kernel_initializer=W_init,bias_initializer=b_init))
 
-#call the convnet Sequential model on each of the input tensors so params will be shared
-encoded_l = convnet(left_input)
-encoded_r = convnet(right_input)
-#layer to merge two encoded inputs with the l1 distance between them
-L1_layer = Lambda(lambda tensors:K.abs(tensors[0] - tensors[1]))
-#call this layer on list of two input tensors.
-L1_distance = L1_layer([encoded_l, encoded_r])
-prediction = Dense(1,activation='sigmoid',bias_initializer=b_init)(L1_distance)
-siamese_net = Model(inputs=[left_input,right_input],outputs=prediction)
+    #call the convnet Sequential model on each of the input tensors so params will be shared
+    encoded_l = convnet(left_input)
+    encoded_r = convnet(right_input)
+    #layer to merge two encoded inputs with the l1 distance between them
+    L1_layer = Lambda(lambda tensors:K.abs(tensors[0] - tensors[1]))
+    #call this layer on list of two input tensors.
+    L1_distance = L1_layer([encoded_l, encoded_r])
+    prediction = Dense(1,activation='sigmoid',bias_initializer=b_init)(L1_distance)
+    siamese_net = Model(inputs=[left_input,right_input],outputs=prediction)
 
-optimizer = Adam(0.00006)
-#//TODO: get layerwise learning rates and momentum annealing scheme described in paperworking
-siamese_net.compile(loss="binary_crossentropy",optimizer=optimizer)
+    optimizer = Adam(0.00006)
+    #//TODO: get layerwise learning rates and momentum annealing scheme described in paperworking
+    siamese_net.compile(loss="binary_crossentropy",optimizer=optimizer)
 
-siamese_net.count_params()
+    siamese_net.count_params()
+    return siamese_net
 
 
 # ## Data 
 # The data is pickled as an N_classes x n_examples x width x height array, and there is an accompanyng dictionary to specify which indexes belong to which languages.
 
-# In[2]:
-
-
-PATH = "./" #CHANGE THIS - path where the pickled data is stored
-
-
-with open(os.path.join(PATH, "sig_data_train.pickle"), "rb") as f:
-    (X,c) = pickle.load(f)
-
-with open(os.path.join(PATH, "val.pickle"), "rb") as f:
-    (Xval,cval) = pickle.load(f)
-
-print("X's length {}".format(len(X)))
-
-# print("training alphabets")  
-# print("X's shape {}".format(X.shape))
-# print("training alphabets")
-# print(c.keys())
-print("validation alphabets:")
-print(cval.keys())
-
-
 # In[3]:
+
+
+def load_data():
+    PATH = "./" #CHANGE THIS - path where the pickled data is stored
+
+
+    with open(os.path.join(PATH, "sig_data_train.pickle"), "rb") as f:
+        (X,c) = pickle.load(f)
+
+    with open(os.path.join(PATH, "val.pickle"), "rb") as f:
+        (Xval,cval) = pickle.load(f)
+
+    print("X's length {}".format(len(X)))
+
+    # print("training alphabets")  
+    # print("X's shape {}".format(X.shape))
+    # print("training alphabets")
+    # print(c.keys())
+    print("validation alphabets:")
+    print(cval.keys())
+
+
+# In[4]:
 
 
 class Siamese_Loader:
@@ -222,6 +234,8 @@ class Siamese_Loader:
     
 
 
+# In[5]:
+
 
 
 def concat_images(X):
@@ -302,51 +316,53 @@ def plot_batch_task(pairs):
     plt.yticks([])
     plt.show()
 
-    
+
+# In[8]:
+
+
+def train_model():
+    #Training loop
+    print("!")
+    evaluate_every = 100 # interval for evaluating on one-shot tasks
+    loss_every=50 # interval for printing loss (iterations)
+    batch_size = 32
+    n_iter = 800
+    N_way = 20 # how many classes for testing one-shot tasks>
+    n_val = 250 #how mahy one-shot tasks to validate on?
+    best = -1
+    PATH = "."
+    loader = Siamese_Loader(PATH)
+    siamese_net = create_model()
+    weights_path = os.path.join(PATH, "weights")
+    print("start training time: {}".format(datetime.datetime.now()))
+    for i in range(0, n_iter):
+        (inputs,targets)=loader.get_batch(batch_size)
+
+        start_time = time.time()
+        loss=siamese_net.train_on_batch(inputs,targets)
+        elapsed_time = time.time() - start_time
+        print("Training time: {} seconds".format(elapsed_time))
+
+        print(loss)
+        if i % evaluate_every == 0:
+
+            start_time = time.time()
+            val_acc = loader.test_oneshot(siamese_net,300,"sig_data_train")
+            elapsed_time = time.time() - start_time
+            print("Evaluation time: {} seconds".format(elapsed_time))
+
+            if val_acc >= best:
+                print("saving")
+
+                start_time = time.time()
+                siamese_net.save(weights_path)
+                elapsed_time = time.time() - start_time
+                print("Savinging time: {} seconds".format(elapsed_time))
+
+                best=val_acc
+    print("end training time: {}".format(datetime.datetime.now()))
+    #     if i % loss_every == 0:
+    #         print("iteration {}, training loss: {:.2f},".format(i,loss))
 
 
 
-
-
-def nearest_neighbour_correct(pairs,targets):
-    """returns 1 if nearest neighbour gets the correct answer for a one-shot task
-        given by (pairs, targets)"""
-    L2_distances = np.zeros_like(targets)
-    for i in range(len(targets)):
-        L2_distances[i] = np.sum(np.sqrt(pairs[0][i]**2 - pairs[1][i]**2))
-    if np.argmin(L2_distances) == np.argmax(targets):
-        return 1
-    return 0
-
-
-def test_nn_accuracy(N_ways,n_trials,loader):
-    """Returns accuracy of one shot """
-    print("Evaluating nearest neighbour on {} unique {} way one-shot learning tasks ...".format(n_trials,N_ways))
-
-    n_right = 0
-    
-    for i in range(n_trials):
-        pairs,targets = loader.make_oneshot_task(N_ways,"val")
-        correct = nearest_neighbour_correct(pairs,targets)
-        n_right += correct
-    return 100.0 * n_right / n_trials
-
-#Instantiate the class
-loader = Siamese_Loader(PATH)
-pairs,target = loader.get_batch(10)
-print("No of pairs0 {}".format(len(pairs[0])))
-print("No of pairs1 {}".format(len(pairs[1])))
-print("target {}".format(target))
-    
-#example of a one-shot learning task
-# pairs, targets = loader.make_oneshot_task(20,"train","Japanese_(katakana)")
-# plot_oneshot_task(pairs)
-
-pairs, targets = loader.get_batch(10)
-# plot_batch_task(pairs)
-inputs, targets = loader.get_batch(10,'sig_data_train')
-siamese_net.load_weights('weights')
-probs = siamese_net.predict(inputs)
-print(probs)
-import sys
-sys.stdout.flush()
