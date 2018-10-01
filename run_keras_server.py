@@ -33,7 +33,7 @@ def load_model():
 	# substitute in your own networks just as easily)
 	global siamese_net 
 	siamese_net = SiameseNet_Signature.create_model()
-	siamese_net.load_weights('weights-800-iterations')
+	siamese_net.load_weights('weights')
 
 @app.route("/verify", methods=["POST"])
 def verify():
